@@ -1,0 +1,5 @@
+{
+  "name": "AI Podcast Generator",
+  "description": "An application that transforms text into a two-voice podcast, generating a script and audio segments, and combines them into a final downloadable audio file.",
+  "requestFramePermissions": []
+}
