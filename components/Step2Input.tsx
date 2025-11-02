@@ -8,12 +8,11 @@ interface Step2InputProps {
   onGenerateFull: (text: string) => void;
   isLoading: boolean;
   progressMessage: string;
-  onEditPrompt: () => void;
   inputText: string;
   onGoBack: () => void;
 }
 
-export const Step2Input: React.FC<Step2InputProps> = ({ onGenerate, onGenerateFull, isLoading, progressMessage, onEditPrompt, inputText, onGoBack }) => {
+export const Step2Input: React.FC<Step2InputProps> = ({ onGenerate, onGenerateFull, isLoading, progressMessage, inputText, onGoBack }) => {
   const [text, setText] = useState(inputText);
   const [viewMode, setViewMode] = useState<'editor' | 'raw'>('editor');
   
@@ -73,27 +72,19 @@ export const Step2Input: React.FC<Step2InputProps> = ({ onGenerate, onGenerateFu
           <OutlineEditor jsonString={text} onJsonStringChange={setText} />
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           <button
             type="button"
             onClick={onGoBack}
             disabled={isLoading}
-            className="w-full bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+            className="md:col-span-1 w-full bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
           >
             Go Back
           </button>
           <button
-            type="button"
-            onClick={onEditPrompt}
-            disabled={isLoading}
-            className="w-full bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
-          >
-            Edit Prompt
-          </button>
-          <button
             type="submit"
             disabled={isLoading || !text.trim()}
-            className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-all duration-300 transform hover:scale-105"
+            className="md:col-span-1 w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-all duration-300 transform hover:scale-105"
           >
             {isLoading ? (
               <>
@@ -108,7 +99,7 @@ export const Step2Input: React.FC<Step2InputProps> = ({ onGenerate, onGenerateFu
             type="button"
             onClick={handleFullSubmit}
             disabled={isLoading || !text.trim()}
-            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-all"
+            className="md:col-span-1 w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-all"
           >
             {isLoading ? (
               <>

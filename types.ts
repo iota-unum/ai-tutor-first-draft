@@ -1,3 +1,5 @@
+
+// FIX: Removed self-referential import of `UploadedFile` which caused a name conflict.
 export interface UploadedFile {
   name: string;
   content: string;
@@ -32,6 +34,7 @@ export interface Project {
 export interface AppState {
   currentStep: number;
   projectId: number | null;
+  subject: string;
   uploadedFiles: UploadedFile[];
   outlineJson: string;
   outlineWithSummariesJson: string;
@@ -43,7 +46,6 @@ export interface AppState {
   isLoading: boolean;
   error: string | null;
   progressMessage: string;
-  scriptGenerationPrompt: string;
 }
 
 
@@ -59,7 +61,7 @@ export interface NestedSubIdea {
 }
 
 export interface SubIdea {
-  id: string;
+  id:string;
   level: number;
   title: string;
   nested_sub_ideas?: NestedSubIdea[];

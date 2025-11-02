@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Modality } from '@google/genai';
 
 if (!process.env.API_KEY) {
@@ -7,17 +8,23 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const generateSpeech = async (scriptSegment: string, speaker1: string, speaker2: string): Promise<string> => {
     // Aggressively clean the script to ensure each line is in the format "Speaker: Text".
-    // This removes leading/trailing whitespace and any markdown characters to prevent model confusion.
+    // This removes leading/trailing whitespace, any markdown characters, and synchronization tags
+    // to prevent model confusion.
     const cleanedScriptSegment = scriptSegment
         .split('\n')
-        .map(line => line.trim().replace(/\*/g, ''))
+        // Remove <mark> tags, which are for UI synchronization but confuse the TTS model.
+        .map(line => line.replace(/<mark[^>]*>/g, '').trim())
+        .map(line => line.replace(/\*/g, ''))
         .filter(line => line.length > 0)
         .join('\n');
 
     // The multiSpeakerVoiceConfig is the primary way to control voices.
     // The model automatically maps the speaker names in the script to the configured voices.
     // We pass the cleaned script directly without extra instructions.
-    const ttsPrompt = cleanedScriptSegment;
+    const ttsPrompt = `Leggi in tono vivace e accattivante e con un ritmo veloce e sostenuto
+    
+    
+    ${cleanedScriptSegment}`;
 
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",

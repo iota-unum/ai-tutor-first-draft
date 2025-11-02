@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Stepper } from './components/Stepper';
 import { Step1Upload } from './components/Step1Upload';
 import { Step2Input } from './components/Step2Input';
@@ -8,46 +8,15 @@ import { Step4Script } from './components/Step4Script'; // This is now Step5Revi
 import { Step5Generate } from './components/Step5Generate';
 import { Step6Review } from './components/Step6Review';
 import { Step7Final } from './components/Step7Final';
-import { PromptEditorModal } from './components/PromptEditorModal';
 import { generateSpeech } from './services/geminiService';
-import { generateOutline } from './services/outlineService';
-import { generateScript } from './services/scriptService';
-import { generateSummaryForIdea } from './services/summaryService';
-import { generateStudyAids } from './services/studyAidsService';
+import { generateOutline } from './services/outline';
+import { generateScript } from './services/script';
+import { generateSummaryForIdea } from './services/summary';
+import { generateStudyAids } from './services/studyAids';
 import { generateFinalContentJson } from './services/markdownParser';
 import { AppState, UploadedFile, Project, Outline } from './types';
 import { SCRIPT_SEPARATOR } from './constants';
-import { db, addProject, updateProject, getProject, deleteProject } from './services/db';
-
-
-const SAVED_PROMPT_KEY = 'podcastGeneratorPrompt';
-
-const defaultPromptFallback = `Sei un autore di script per podcast. Il tuo compito è trasformare il testo fornito in uno script per un podcast vivace e colloquiale tra due conduttori, "Voce 1" e "Voce 2".
-
-**REGOLE FONDAMENTALI (da seguire con la massima precisione):**
-
-1.  **Struttura:** Dividi lo script in esattamente 5 segmenti, separati da "--- SEGMENT ---".
-2.  **Formato:** Usa solo testo semplice. Ogni riga di dialogo deve iniziare con "Voce 1: " o "Voce 2: ". Non usare **mai** markdown (\`*\`, \`**\`, ecc.).
-3.  **Alternanza Voci:** **Questa è la regola più importante.** Le voci devono alternarsi rigorosamente. A "Voce 1" deve SEMPRE seguire "Voce 2", e viceversa. Non ci devono **mai** essere due battute consecutive della stessa voce, nemmeno tra la fine di un segmento e l'inizio del successivo.
-4.  **Contenuto:** Non aggiungere introduzioni o conclusioni generali allo script. Mantieni un flusso di discorso continuo tra i segmenti.
-5.  **Lingua:** Presta attenzione alla pronuncia corretta di parole complesse o straniere (es. noùmeno, epistéme).
-
-**STILE E TONO (per rendere la conversazione naturale e coinvolgente):**
-
-*   **Atteggiamento dei Conduttori:** I conduttori sono esperti dell'argomento, non stanno leggendo o riassumendo un testo. **Non devono MAI dire frasi come "il testo fornito dice" o "secondo questo articolo".** Devono discutere l'argomento (che sia un libro, una teoria, un evento) in modo naturale, come se la conoscenza fosse loro.
-*   **Tono:** Deve essere energetico, entusiasta e informale. Usa un linguaggio accessibile e frasi colloquiali come "Insomma," "Voglio dire," "Sai,".
-*   **Struttura del Dialogo:** Crea un botta e risposta dinamico. Alterna battute brevi e incisive a spiegazioni più lunghe. Usa frequenti interiezioni di assenso come "Esatto," "Certo," "Proprio così." per mantenere il flusso.
-*   **Interazione:** Un conduttore può porre domande o esprimere un dubbio, permettendo all'altro di chiarire. Devono costruire l'uno sulle idee dell'altro, dando l'impressione di una vera collaborazione e convalidando i punti a vicenda ("Hai colto il punto", "Esattamente quello che pensavo").
-*   **Tecniche di Coinvolgimento:** Usa domande retoriche per passare da un punto all'altro ("Affascinante, non trovi?"). Spiega concetti complessi con analogie semplici ("È un po' come se...").
-
-**FLUSSO GENERALE:**
-
-1.  Inizia introducendo l'idea centrale o una concezione comune sull'argomento.
-2.  Sviluppa la discussione introducendo nuove informazioni o prospettive che approfondiscono o sfidano l'idea iniziale.
-3.  Esplora le implicazioni e il contesto più ampio.
-4.  Concludi ogni segmento in modo che si colleghi naturalmente al successivo, mantenendo alta la curiosità.
-
-Ecco il testo da elaborare:`;
+import { addProject, updateProject, getProject } from './services/db';
 
 
 const correctVoiceAlternation = (script: string): string => {
@@ -121,6 +90,7 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>({
     currentStep: 1,
     projectId: null,
+    subject: '',
     uploadedFiles: [],
     outlineJson: '',
     outlineWithSummariesJson: '',
@@ -132,57 +102,13 @@ const App: React.FC = () => {
     isLoading: false,
     error: null,
     progressMessage: '',
-    scriptGenerationPrompt: '',
   });
-  
-  const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
-  const defaultPromptRef = useRef<string>('');
-
-  useEffect(() => {
-    const loadInitialPrompt = async () => {
-      let defaultPrompt = defaultPromptFallback;
-      try {
-        const response = await fetch('./prompt.md');
-        if (response.ok) {
-          defaultPrompt = await response.text();
-        } else {
-          console.warn('Could not fetch prompt.md, using fallback.');
-        }
-      } catch (error) {
-        console.error('Error fetching prompt.md, using fallback.', error);
-      }
-      
-      defaultPromptRef.current = defaultPrompt;
-
-      let promptToSet = defaultPrompt;
-      try {
-        const savedPrompt = localStorage.getItem(SAVED_PROMPT_KEY);
-        if (savedPrompt) {
-          promptToSet = savedPrompt;
-        }
-      } catch (error) {
-        console.error("Could not read from localStorage, using default prompt.", error);
-      }
-
-      setAppState(prev => ({ ...prev, scriptGenerationPrompt: promptToSet }));
-    };
-
-    loadInitialPrompt();
-  }, []);
 
   const handleReset = () => {
-    let promptToSet = defaultPromptRef.current;
-    try {
-        const savedPrompt = localStorage.getItem(SAVED_PROMPT_KEY);
-        if (savedPrompt) {
-            promptToSet = savedPrompt;
-        }
-    } catch (error) {
-        console.error("Could not read from localStorage on reset", error);
-    }
     setAppState({
       currentStep: 1,
       projectId: null,
+      subject: '',
       uploadedFiles: [],
       outlineJson: '',
       outlineWithSummariesJson: '',
@@ -194,19 +120,7 @@ const App: React.FC = () => {
       isLoading: false,
       error: null,
       progressMessage: '',
-      scriptGenerationPrompt: promptToSet,
     });
-    setIsPromptModalOpen(false);
-  };
-
-  const handleUpdatePrompt = (newPrompt: string) => {
-    try {
-      localStorage.setItem(SAVED_PROMPT_KEY, newPrompt);
-    } catch (error) {
-      console.error("Could not save to localStorage", error);
-    }
-    setAppState(prev => ({ ...prev, scriptGenerationPrompt: newPrompt }));
-    setIsPromptModalOpen(false);
   };
 
   const handleFilesProceed = async (files: UploadedFile[]) => {
@@ -249,6 +163,7 @@ const App: React.FC = () => {
       setAppState(prev => ({
         ...prev,
         projectId: newProjectId,
+        subject: subject,
         outlineJson: formattedJson,
         currentStep: 2,
         isLoading: false,
@@ -338,15 +253,10 @@ const App: React.FC = () => {
         currentStep: 4, // go to loading view
         audioSegments: [],
     }));
-    
-    const originalText = appState.uploadedFiles
-      .filter(f => f.selected)
-      .map(f => `--- START OF ${f.name} ---\n\n${f.content}\n\n--- END OF ${f.name} ---`)
-      .join('\n\n');
       
     try {
         setAppState(prev => ({...prev, progressMessage: 'Generating podcast script...'}));
-        const scriptPromise = generateScript(finalContentJson, originalText, appState.scriptGenerationPrompt)
+        const scriptPromise = generateScript(finalContentJson)
             .then(rawScript => correctVoiceAlternation(rawScript));
         
         setAppState(prev => ({...prev, progressMessage: 'Generating flashcards & quizzes...'}));
@@ -473,9 +383,10 @@ const App: React.FC = () => {
 
         // 2. Generate Script & Study Aids
         setAppState(prev => ({ ...prev, progressMessage: 'Generating script & study materials...' }));
-        const scriptPromise = generateScript(finalContentJson, originalText, appState.scriptGenerationPrompt)
+        const scriptPromise = generateScript(finalContentJson)
             .then(rawScript => correctVoiceAlternation(rawScript));
         const studyAidsPromise = generateStudyAids(finalContentJson);
+
         const [script, studyMaterialsJson] = await Promise.all([scriptPromise, studyAidsPromise]);
         
         const segments = script.split(SCRIPT_SEPARATOR).map(s => s.trim()).filter(s => s.length > 0);
@@ -545,7 +456,7 @@ const App: React.FC = () => {
 
         let targetStep = 1;
         if (project.audioSegments && project.audioSegments.length > 0) {
-            targetStep = 8;
+            targetStep = 7;
         } else if (project.fullScript && project.studyMaterialsJson) {
             targetStep = 5;
         } else if (project.finalContentJson) {
@@ -562,6 +473,7 @@ const App: React.FC = () => {
             ...prev,
             currentStep: targetStep,
             projectId: project.id!,
+            subject: project.subject,
             uploadedFiles: project.uploadedFiles,
             outlineJson: project.outlineJson ?? '',
             outlineWithSummariesJson: project.outlineWithSummariesJson ?? '',
@@ -587,15 +499,21 @@ const App: React.FC = () => {
       case 1:
         return <Step1Upload onProceed={handleFilesProceed} initialFiles={appState.uploadedFiles} isLoading={appState.isLoading} progressMessage={appState.progressMessage} onLoadProject={handleLoadProject} />;
       case 2:
-        return <Step2Input onGenerate={handleSummaryGeneration} onGenerateFull={handleFullGeneration} isLoading={appState.isLoading} progressMessage={appState.progressMessage} onEditPrompt={() => setIsPromptModalOpen(true)} inputText={appState.outlineJson} onGoBack={() => goToStep(1)} />;
+        return <Step2Input onGenerate={handleSummaryGeneration} onGenerateFull={handleFullGeneration} isLoading={appState.isLoading} progressMessage={appState.progressMessage} inputText={appState.outlineJson} onGoBack={() => goToStep(1)} />;
       case 3:
-        return <Step3Summaries finalContentJson={appState.finalContentJson} onConfirm={handleContentGeneration} onGoBack={() => goToStep(2)} />;
+        return <Step3Summaries 
+                  finalContentJson={appState.finalContentJson}
+                  outlineWithSummariesJson={appState.outlineWithSummariesJson}
+                  subject={appState.subject}
+                  onConfirm={handleContentGeneration} 
+                  onGoBack={() => goToStep(2)} />;
       case 4:
          return <Step5Generate progressMessage={appState.progressMessage} />; // Generic loading screen for script & study aids
       case 5:
         return <Step4Script 
             script={appState.fullScript!} 
             studyMaterialsJson={appState.studyMaterialsJson}
+            subject={appState.subject}
             onConfirm={handleAudioGeneration} 
             onGoBack={() => goToStep(3)} 
             />;
@@ -604,7 +522,7 @@ const App: React.FC = () => {
       case 7:
         return <Step6Review audioSegments={appState.audioSegments} onConfirm={() => goToStep(8)} />;
       case 8:
-        return <Step7Final audioSegments={appState.audioSegments} onRestart={handleReset} />;
+        return <Step7Final audioSegments={appState.audioSegments} onRestart={handleReset} subject={appState.subject} />;
       default:
         return null;
     }
@@ -640,12 +558,6 @@ const App: React.FC = () => {
           </div>
         </main>
       </div>
-      <PromptEditorModal 
-        isOpen={isPromptModalOpen}
-        onClose={() => setIsPromptModalOpen(false)}
-        prompt={appState.scriptGenerationPrompt}
-        onSave={handleUpdatePrompt}
-      />
     </div>
   );
 };

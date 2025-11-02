@@ -6,7 +6,7 @@ if (!process.env.API_KEY) {
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const generateOutline = async (text: string): Promise<string> => {
-  const prompt = `Basandoti sul seguente testo, genera una mappa mentale strutturata in formato JSON. La mappa mentale deve contenere un argomento, una descrizione generale ed esattamente 5 idee principali. Ogni idea può avere sotto-idee annidate. Attieniti rigorosamente allo schema JSON fornito.
+  const prompt = `Sei un tutor che deve aiutare uno studente a comprendere e assimilare questo testo nel minor tempo possibile. Il tuo compito è generare una mappa mentale strutturata in formato JSON. La mappa mentale deve contenere un argomento, una descrizione generale ed esattamente 5 idee principali.Devi estrarre le idee principali utili a uno studente per superare una interrogazione sull'argomento. Ogni idea può avere sotto-idee annidate. Attieniti rigorosamente allo schema JSON fornito.
 
 **REGOLE FONDAMENTALI:**
 1.  **LIMITE DI PAROLE:** Ogni campo 'title', a tutti i livelli, NON DEVE superare le 3 parole.
@@ -69,7 +69,7 @@ Testo da analizzare:
   };
   
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.0-flash',
     contents: prompt,
     config: {
       responseMimeType: "application/json",

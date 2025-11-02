@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { decodeBase64 } from '../utils/audioUtils';
 import { Spinner } from './Spinner';
@@ -9,9 +8,17 @@ declare const lamejs: any;
 interface Step7FinalProps {
   audioSegments: string[];
   onRestart: () => void;
+  subject: string;
 }
 
-export const Step7Final: React.FC<Step7FinalProps> = ({ audioSegments, onRestart }) => {
+const createFileName = (title: string, extension: string): string => {
+    // Replace invalid characters with an underscore, trim, and convert to lowercase.
+    const sanitized = title.replace(/[\\?%*:|"<>]/g, '_').replace(/\s+/g, '_').toLowerCase();
+    // Ensure the filename is not empty.
+    return `${sanitized || 'podcast'}.${extension}`;
+};
+
+export const Step7Final: React.FC<Step7FinalProps> = ({ audioSegments, onRestart, subject }) => {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isZipping, setIsZipping] = useState(false);
@@ -131,7 +138,7 @@ export const Step7Final: React.FC<Step7FinalProps> = ({ audioSegments, onRestart
         
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'podcast_segments.zip';
+        link.download = createFileName(subject + '_segments', 'zip');
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -179,7 +186,7 @@ export const Step7Final: React.FC<Step7FinalProps> = ({ audioSegments, onRestart
               {downloadUrl && (
                 <a
                     href={downloadUrl}
-                    download="podcast.mp3"
+                    download={createFileName(subject, 'mp3')}
                     className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-all duration-300 transform hover:scale-105"
                 >
                     Download Full Podcast (.mp3)

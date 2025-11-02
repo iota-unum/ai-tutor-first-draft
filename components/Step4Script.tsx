@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { FlashcardViewer } from './FlashcardViewer';
 import { QuizViewer } from './QuizViewer';
@@ -6,13 +7,26 @@ import { Outline } from '../types';
 interface Step5ReviewContentProps {
   script: string;
   studyMaterialsJson: string;
+  subject: string;
   onConfirm: (editedScript: string, editedStudyMaterialsJson: string) => void;
   onGoBack: () => void;
 }
 
 type ViewMode = 'script' | 'flashcards' | 'quiz';
 
-export const Step4Script: React.FC<Step5ReviewContentProps> = ({ script, studyMaterialsJson, onConfirm, onGoBack }) => {
+const createFileName = (title: string, extension: string): string => {
+    const sanitized = title.replace(/[\\?%*:|"<>]/g, '_').replace(/\s+/g, '-').toLowerCase();
+    return `${sanitized || 'download'}.${extension}`;
+};
+
+const countWords = (text: string): number => {
+  if (!text) return 0;
+  // This regex handles multiple spaces and newlines and filters empty strings
+  return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+};
+
+
+export const Step4Script: React.FC<Step5ReviewContentProps> = ({ script, studyMaterialsJson, subject, onConfirm, onGoBack }) => {
   const [editedScript, setEditedScript] = useState(script);
   const [editedMaterials, setEditedMaterials] = useState<Outline>(() => studyMaterialsJson ? JSON.parse(studyMaterialsJson) : { subject: '', description: '', ideas: []});
   const [viewMode, setViewMode] = useState<ViewMode>('script');
@@ -22,7 +36,7 @@ export const Step4Script: React.FC<Step5ReviewContentProps> = ({ script, studyMa
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'podcast-script.txt');
+    link.setAttribute('download', createFileName(`${subject}-script`, 'txt'));
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -48,12 +62,17 @@ export const Step4Script: React.FC<Step5ReviewContentProps> = ({ script, studyMa
       switch(viewMode) {
           case 'script':
               return (
-                  <textarea
-                    value={editedScript}
-                    onChange={(e) => setEditedScript(e.target.value)}
-                    className="w-full h-96 p-4 bg-gray-900 border-2 border-gray-700 rounded-lg whitespace-pre-wrap font-mono focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                    aria-label="Podcast script editor"
-                  />
+                  <>
+                    <textarea
+                      value={editedScript}
+                      onChange={(e) => setEditedScript(e.target.value)}
+                      className="w-full h-96 p-4 bg-gray-900 border-2 border-gray-700 rounded-lg whitespace-pre-wrap font-mono focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      aria-label="Podcast script editor"
+                    />
+                    <div className="text-right text-sm text-gray-400 mt-2 pr-2">
+                        Word Count: <span className="font-mono font-bold text-purple-300">{countWords(editedScript)}</span>
+                    </div>
+                  </>
               );
           case 'flashcards':
               return <FlashcardViewer outline={editedMaterials} onUpdate={handleMaterialsUpdate} />;

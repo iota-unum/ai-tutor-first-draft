@@ -13,7 +13,11 @@ export const generateSummaryForIdea = async (
 ): Promise<string> => {
   const ideaContext = JSON.stringify(idea, null, 2);
 
-  let prompt = `Sei un assistente AI specializzato nella sintesi di testi complessi. Il tuo compito è creare un riassunto strutturato e coerente in formato markdown, seguendo delle regole ferree.
+  let prompt = `Sei un tutor che deve aiutare uno studente a comprendere e assimilare questo testo nel minor tempo possibile. Il tuo compito è creare un riassunto strutturato, coerente e comprensibile per uno studente liceale in formato markdown, seguendo delle regole ferree. 
+  
+  
+  
+ 
 
 **ISTRUZIONI FONDAMENTALI (da seguire con la massima precisione):**
 1.  **Struttura Heading:** Utilizza la seguente gerarchia di heading markdown:
@@ -23,7 +27,7 @@ export const generateSummaryForIdea = async (
 2.  **Corrispondenza Titoli:** Il testo di ogni heading (es. \`# Titolo Idea\`) DEVE CORRISPONDERE ESATTAMENTE al campo \`title\` dell'idea/sotto-idea corrispondente nel JSON fornito.
 3.  **Nessun Testo Introduttivo:** **Questa è una regola critica.** L'output DEVE iniziare immediatamente con l'heading H1 (\`#\`) corrispondente al titolo dell'idea principale. NON AGGIUNGERE alcun paragrafo, frase o testo di introduzione prima del primo heading. Tutto il testo deve trovarsi sotto un heading appropriato.
 4.  **Contenuto:** Sotto ogni heading, scrivi un paragrafo riassuntivo basato sul "Testo Originale" e focalizzato su quell'idea specifica.
-5. **Lunghezza:** Il riassunto non deve superare le 500 parole.
+5. **Lunghezza:** L'obiettivo è creare un riassunto dettagliato di circa 400-500 parole per questa idea. L'obiettivo totale per tutti i riassunti combinati è di circa 2000-2500 parole.
 Analizza il "Testo Originale" e crea un riassunto che segua rigorosamente la "Struttura Idea" fornita.
 
 **Struttura Idea (focus di questo riassunto):**
