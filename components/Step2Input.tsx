@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Spinner } from './Spinner';
 import { OutlineEditor } from './OutlineEditor';
+import { Outline } from '../types';
 
 interface Step2InputProps {
   onGenerate: (text: string) => void;
@@ -12,6 +13,22 @@ interface Step2InputProps {
   onGoBack: () => void;
 }
 
+const getTotalNodeCount = (outline: Outline | null): number => {
+  if (!outline || !outline.ideas) return 0;
+  
+  let totalNodes = 0;
+  const traverse = (nodes: any[]) => {
+    if (!nodes) return;
+    for (const node of nodes) {
+      totalNodes++;
+      if (node.sub_ideas) traverse(node.sub_ideas);
+      if (node.nested_sub_ideas) traverse(node.nested_sub_ideas);
+    }
+  };
+  traverse(outline.ideas);
+  return totalNodes;
+};
+
 export const Step2Input: React.FC<Step2InputProps> = ({ onGenerate, onGenerateFull, isLoading, progressMessage, inputText, onGoBack }) => {
   const [text, setText] = useState(inputText);
   const [viewMode, setViewMode] = useState<'editor' | 'raw'>('editor');
@@ -19,6 +36,16 @@ export const Step2Input: React.FC<Step2InputProps> = ({ onGenerate, onGenerateFu
   useEffect(() => {
     setText(inputText);
   }, [inputText]);
+
+  const nodeCount = useMemo(() => {
+    try {
+      if (!text) return 0;
+      const parsedOutline: Outline = JSON.parse(text);
+      return getTotalNodeCount(parsedOutline);
+    } catch (e) {
+      return 0; // Return 0 if JSON is invalid or empty
+    }
+  }, [text]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +63,14 @@ export const Step2Input: React.FC<Step2InputProps> = ({ onGenerate, onGenerateFu
 
   return (
     <div className="flex flex-col items-center">
-      <h2 className="text-2xl font-semibold mb-4 text-center">Step 2: Review and Confirm Outline</h2>
+      <div className="w-full flex justify-between items-center mb-2">
+        <h2 className="text-2xl font-semibold text-left">Step 2: Review and Confirm Outline</h2>
+        {nodeCount > 0 && (
+          <div className="text-sm font-mono bg-gray-900 px-3 py-1 rounded-md border border-gray-700">
+            Total Nodes: <span className="font-bold text-purple-400">{nodeCount}</span>
+          </div>
+        )}
+      </div>
       <p className="text-gray-400 mb-6 text-center max-w-lg">
         The content from your files has been structured into an outline. Review or edit the titles below before generating the podcast script.
       </p>

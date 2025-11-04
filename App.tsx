@@ -102,6 +102,7 @@ const App: React.FC = () => {
     isLoading: false,
     error: null,
     progressMessage: '',
+    regeneratingSegmentIndex: null,
   });
 
   const handleReset = () => {
@@ -120,6 +121,7 @@ const App: React.FC = () => {
       isLoading: false,
       error: null,
       progressMessage: '',
+      regeneratingSegmentIndex: null,
     });
   };
 
@@ -336,6 +338,48 @@ const App: React.FC = () => {
       setAppState(prev => ({ ...prev, isLoading: false, currentStep: 5, error: `Audio Generation Failed: ${error.message}` }));
     }
   }, [appState.projectId]);
+  
+  const handleRegenerateSegment = async (index: number, newScriptSegment: string) => {
+    setAppState(prev => ({ ...prev, regeneratingSegmentIndex: index, error: null }));
+    try {
+      const speaker1 = 'Voce 1';
+      const speaker2 = 'Voce 2';
+      const newAudioData = await generateSpeech(newScriptSegment, speaker1, speaker2);
+
+      const newAudioSegments = [...appState.audioSegments];
+      newAudioSegments[index] = newAudioData;
+
+      const newScriptSegments = [...appState.scriptSegments];
+      newScriptSegments[index] = newScriptSegment;
+      
+      const newFullScript = newScriptSegments.join(`\n\n${SCRIPT_SEPARATOR}\n\n`);
+
+      if (appState.projectId) {
+        await updateProject(appState.projectId, {
+          audioSegments: newAudioSegments,
+          fullScript: newFullScript,
+        });
+      }
+
+      setAppState(prev => ({
+        ...prev,
+        audioSegments: newAudioSegments,
+        scriptSegments: newScriptSegments,
+        fullScript: newFullScript,
+        regeneratingSegmentIndex: null,
+      }));
+
+    } catch (e) {
+      const error = e instanceof Error ? e : new Error('An unknown error occurred');
+      console.error(error);
+      setAppState(prev => ({
+        ...prev,
+        error: `Failed to regenerate audio for segment ${index + 1}: ${error.message}`,
+        regeneratingSegmentIndex: null,
+      }));
+    }
+  };
+
 
   const handleFullGeneration = async (jsonOutline: string) => {
      setAppState(prev => ({ 
@@ -520,7 +564,13 @@ const App: React.FC = () => {
       case 6:
         return <Step5Generate progressMessage={appState.progressMessage} />; // Audio generation
       case 7:
-        return <Step6Review audioSegments={appState.audioSegments} onConfirm={() => goToStep(8)} />;
+        return <Step6Review 
+                  audioSegments={appState.audioSegments}
+                  scriptSegments={appState.scriptSegments}
+                  onConfirm={() => goToStep(8)} 
+                  onRegenerate={handleRegenerateSegment}
+                  regeneratingIndex={appState.regeneratingSegmentIndex}
+                />;
       case 8:
         return <Step7Final audioSegments={appState.audioSegments} onRestart={handleReset} subject={appState.subject} />;
       default:

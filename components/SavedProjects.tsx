@@ -1,12 +1,17 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getAllProjects, deleteProject, db } from '../services/db';
 import { Project } from '../types';
 import { Spinner } from './Spinner';
+import JSZip from 'jszip';
+import { decodeBase64, encodePcmToMp3Blob, blobToBase64 } from '../utils/audioUtils';
 
 interface SavedProjectsProps {
     onLoadProject: (id: number) => void;
 }
+
+const createFolderName = (title: string): string => {
+    return title.replace(/[\\?%*:|"<>]/g, '_').replace(/\s+/g, '_').toLowerCase();
+};
 
 export const SavedProjects: React.FC<SavedProjectsProps> = ({ onLoadProject }) => {
     const [projects, setProjects] = useState<Project[]>([]);
@@ -53,16 +58,73 @@ export const SavedProjects: React.FC<SavedProjectsProps> = ({ onLoadProject }) =
         setIsExporting(true);
         setError(null);
         try {
+            const zip = new JSZip();
             const allProjects = await getAllProjects();
-            // Dexie adds an `id` field, which we don't want to specify on import.
-            const exportableProjects = allProjects.map(({ id, ...rest }) => rest);
-            const jsonString = JSON.stringify(exportableProjects, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
+
+            for (const project of allProjects) {
+                const folderName = createFolderName(project.subject || `project_${project.id}`);
+                const projectFolder = zip.folder(folderName);
+                if (!projectFolder) {
+                  throw new Error(`Could not create folder for project ${project.subject}`);
+                }
+                
+                // Deep copy the project to modify it for JSON export without affecting the original object
+                const { id, ...projectDataForJson } = JSON.parse(JSON.stringify(project));
+
+
+                if (project.audioSegments && project.audioSegments.length > 0) {
+                    const audioFolder = projectFolder.folder('audio');
+                    if (!audioFolder) {
+                        throw new Error(`Could not create audio folder for project ${project.subject}`);
+                    }
+                    
+                    const audioFilePaths: string[] = [];
+                    
+                    for (let i = 0; i < project.audioSegments.length; i++) {
+                        const segmentBase64 = project.audioSegments[i];
+                        const rawFileName = `segment_${i + 1}.b64`;
+                        const mp3FileName = `segment_${i + 1}.mp3`;
+                        
+                        // Path relative to the project.json file
+                        const relativeAudioPath = `audio/${rawFileName}`;
+                        audioFilePaths.push(relativeAudioPath);
+                        
+                        // Store the raw base64 data for lossless re-import
+                        audioFolder.file(rawFileName, segmentBase64);
+                        
+                        // Generate and store a user-friendly MP3 file
+                        const pcmData = decodeBase64(segmentBase64);
+                        const mp3Blob = encodePcmToMp3Blob(pcmData);
+                        audioFolder.file(mp3FileName, mp3Blob);
+                    }
+                    
+                    // Replace raw audio data with file paths in the JSON object
+                    projectDataForJson.audioSegments = audioFilePaths;
+
+
+                    // Also generate a combined MP3 for user convenience
+                    const pcmChunks = project.audioSegments.map(decodeBase64);
+                    const totalLength = pcmChunks.reduce((acc, chunk) => acc + chunk.length, 0);
+                    const combinedPcm = new Uint8Array(totalLength);
+                    let offset = 0;
+                    for (const chunk of pcmChunks) {
+                        combinedPcm.set(chunk, offset);
+                        offset += chunk.length;
+                    }
+                    const combinedMp3Blob = encodePcmToMp3Blob(combinedPcm);
+                    audioFolder.file('full_podcast.mp3', combinedMp3Blob);
+                }
+                
+                // Create project.json with audio data replaced by file paths
+                projectFolder.file('project.json', JSON.stringify(projectDataForJson, null, 2));
+            }
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(zipBlob);
             
             const link = document.createElement('a');
             link.href = url;
-            link.download = `podcast_projects_backup_${new Date().toISOString().slice(0, 10)}.json`;
+            link.download = `podcast_projects_backup_${new Date().toISOString().slice(0, 10)}.zip`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -84,27 +146,62 @@ export const SavedProjects: React.FC<SavedProjectsProps> = ({ onLoadProject }) =
         setError(null);
 
         try {
-            const text = await file.text();
-            const importedProjects: Omit<Project, 'id'>[] = JSON.parse(text);
+            const zip = await JSZip.loadAsync(file);
+            const projectsToImport: Omit<Project, 'id'>[] = [];
+            
+            const projectJsonFiles = zip.file(/project\.json$/);
 
-            if (!Array.isArray(importedProjects)) {
-                throw new Error("Invalid format: JSON file is not an array.");
+            for (const projectJsonFile of projectJsonFiles) {
+                const projectJsonString = await projectJsonFile.async('string');
+                const projectData = JSON.parse(projectJsonString);
+
+                // Check if audioSegments exists and contains file paths (new format)
+                if (
+                    projectData.audioSegments &&
+                    Array.isArray(projectData.audioSegments) &&
+                    projectData.audioSegments.length > 0 &&
+                    typeof projectData.audioSegments[0] === 'string' &&
+                    projectData.audioSegments[0].endsWith('.b64')
+                ) {
+                    const loadedAudioSegments: string[] = [];
+                    const basePath = projectJsonFile.name.substring(0, projectJsonFile.name.lastIndexOf('/') + 1);
+
+                    for (const relativeAudioPath of projectData.audioSegments) {
+                        const fullAudioPath = basePath + relativeAudioPath;
+                        const audioFile = zip.file(fullAudioPath);
+                        if (audioFile) {
+                            const audioBase64 = await audioFile.async('string');
+                            loadedAudioSegments.push(audioBase64);
+                        } else {
+                            throw new Error(`Audio file '${fullAudioPath}' listed in project.json was not found in the ZIP archive.`);
+                        }
+                    }
+                    // Replace the file paths with the loaded base64 audio data
+                    projectData.audioSegments = loadedAudioSegments;
+                }
+                // If the above condition is false, we assume it's the old format with embedded audio data,
+                // and we don't need to do anything.
+
+                const newProject: Omit<Project, 'id'> = {
+                    ...projectData,
+                    createdAt: projectData.createdAt ? new Date(projectData.createdAt) : new Date(),
+                };
+                
+                projectsToImport.push(newProject);
             }
-            // Add a date to createdAt if it's missing for backwards compatibility
-            const projectsToImport = importedProjects.map(p => ({
-                ...p,
-                createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
-            }));
 
-            await db.projects.bulkAdd(projectsToImport as Project[]);
-            await fetchProjects(); // Refresh list
+            if (projectsToImport.length > 0) {
+                await db.projects.bulkAdd(projectsToImport as Project[]);
+                await fetchProjects();
+            } else {
+                throw new Error("No valid 'project.json' files found in the zip archive.");
+            }
         } catch (e) {
             const err = e instanceof Error ? e : new Error('An unknown error occurred');
             setError(`Failed to import projects: ${err.message}`);
             console.error(err);
         } finally {
             setIsImporting(false);
-            // Reset file input
             if(importFileRef.current) {
                 importFileRef.current.value = '';
             }
@@ -159,9 +256,9 @@ export const SavedProjects: React.FC<SavedProjectsProps> = ({ onLoadProject }) =
                     {isImporting ? <Spinner/> : (
                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" /></svg>
                     )}
-                    {isImporting ? 'Importing...' : 'Import Projects (.json)'}
+                    {isImporting ? 'Importing...' : 'Import Projects (.zip)'}
                 </button>
-                <input type="file" ref={importFileRef} onChange={handleImport} accept=".json" className="hidden" />
+                <input type="file" ref={importFileRef} onChange={handleImport} accept=".zip" className="hidden" />
             </div>
         )
     }
@@ -186,9 +283,9 @@ export const SavedProjects: React.FC<SavedProjectsProps> = ({ onLoadProject }) =
                     {isImporting ? <Spinner/> : (
                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" /></svg>
                     )}
-                    {isImporting ? 'Importing...' : 'Import Projects'}
+                    {isImporting ? 'Importing...' : 'Import Projects (.zip)'}
                 </button>
-                <input type="file" ref={importFileRef} onChange={handleImport} accept=".json" className="hidden" />
+                <input type="file" ref={importFileRef} onChange={handleImport} accept=".zip" className="hidden" />
 
                 <button 
                     onClick={handleExport}
@@ -198,7 +295,7 @@ export const SavedProjects: React.FC<SavedProjectsProps> = ({ onLoadProject }) =
                     {isExporting ? <Spinner/> : (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     )}
-                    {isExporting ? 'Exporting...' : 'Export All'}
+                    {isExporting ? 'Exporting...' : 'Export All (.zip)'}
                 </button>
             </div>
 

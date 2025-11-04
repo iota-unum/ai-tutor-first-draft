@@ -46,6 +46,7 @@ export interface AppState {
   isLoading: boolean;
   error: string | null;
   progressMessage: string;
+  regeneratingSegmentIndex: number | null;
 }
 
 

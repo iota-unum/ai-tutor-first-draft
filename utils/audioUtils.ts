@@ -1,3 +1,6 @@
+
+declare const lamejs: any;
+
 export const decodeBase64 = (base64: string): Uint8Array => {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -6,6 +9,15 @@ export const decodeBase64 = (base64: string): Uint8Array => {
     bytes[i] = binaryString.charCodeAt(i);
   }
   return bytes;
+};
+
+export const encodeBase64 = (bytes: Uint8Array): string => {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 };
 
 // FIX: Add and export `createWavBlob` function to fix missing export error.
@@ -55,4 +67,49 @@ export const createWavBlob = (pcmChunks: Uint8Array[]): Blob => {
   new Uint8Array(buffer).set(combinedPcm, 44);
 
   return new Blob([view], { type: 'audio/wav' });
+};
+
+export const encodePcmToMp3Blob = (pcmData: Uint8Array): Blob => {
+    if (typeof lamejs === 'undefined') {
+        throw new Error("MP3 encoding library not loaded.");
+    }
+    const pcmSamples = new Int16Array(pcmData.buffer);
+
+    const sampleRate = 24000;
+    const numChannels = 1;
+    const mp3Encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, 128);
+    const mp3Data = [];
+    
+    const sampleBlockSize = 1152;
+    for (let i = 0; i < pcmSamples.length; i += sampleBlockSize) {
+        const sampleChunk = pcmSamples.subarray(i, i + sampleBlockSize);
+        const mp3buf = mp3Encoder.encodeBuffer(sampleChunk);
+        if (mp3buf.length > 0) {
+            mp3Data.push(mp3buf);
+        }
+    }
+
+    const end = mp3Encoder.flush();
+    if (end.length > 0) {
+        mp3Data.push(end);
+    }
+
+    return new Blob(mp3Data, { type: 'audio/mp3' });
+};
+
+export const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      const content = base64String.split(',')[1];
+      if (content) {
+        resolve(content);
+      } else {
+        reject(new Error("Failed to convert blob to base64 string."));
+      }
+    };
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(blob);
+  });
 };

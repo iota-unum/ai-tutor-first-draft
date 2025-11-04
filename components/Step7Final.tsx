@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { decodeBase64 } from '../utils/audioUtils';
+import { decodeBase64, encodePcmToMp3Blob } from '../utils/audioUtils';
 import { Spinner } from './Spinner';
 import JSZip from 'jszip';
 
@@ -49,29 +50,8 @@ export const Step7Final: React.FC<Step7FinalProps> = ({ audioSegments, onRestart
                 combinedPcm.set(chunk, offset);
                 offset += chunk.length;
             }
-
-            const pcmSamples = new Int16Array(combinedPcm.buffer);
-
-            const sampleRate = 24000;
-            const numChannels = 1;
-            const mp3Encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, 128);
-            const mp3Data = [];
             
-            const sampleBlockSize = 1152;
-            for (let i = 0; i < pcmSamples.length; i += sampleBlockSize) {
-                const sampleChunk = pcmSamples.subarray(i, i + sampleBlockSize);
-                const mp3buf = mp3Encoder.encodeBuffer(sampleChunk);
-                if (mp3buf.length > 0) {
-                    mp3Data.push(mp3buf);
-                }
-            }
-
-            const end = mp3Encoder.flush();
-            if (end.length > 0) {
-                mp3Data.push(end);
-            }
-
-            const mp3Blob = new Blob(mp3Data, { type: 'audio/mp3' });
+            const mp3Blob = encodePcmToMp3Blob(combinedPcm);
             url = URL.createObjectURL(mp3Blob);
             setDownloadUrl(url);
         } catch (e) {
@@ -93,30 +73,6 @@ export const Step7Final: React.FC<Step7FinalProps> = ({ audioSegments, onRestart
     };
   }, [audioSegments]);
   
-  const encodeSingleSegmentToMp3 = (base64Audio: string): Blob => {
-    if (typeof lamejs === 'undefined') {
-        throw new Error("MP3 encoding library not loaded.");
-    }
-    const pcmSamples = new Int16Array(decodeBase64(base64Audio).buffer);
-    const sampleRate = 24000;
-    const numChannels = 1;
-    const mp3Encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, 128);
-    const mp3Data = [];
-    const sampleBlockSize = 1152;
-    for (let i = 0; i < pcmSamples.length; i += sampleBlockSize) {
-        const sampleChunk = pcmSamples.subarray(i, i + sampleBlockSize);
-        const mp3buf = mp3Encoder.encodeBuffer(sampleChunk);
-        if (mp3buf.length > 0) {
-            mp3Data.push(mp3buf);
-        }
-    }
-    const end = mp3Encoder.flush();
-    if (end.length > 0) {
-        mp3Data.push(end);
-    }
-    return new Blob(mp3Data, { type: 'audio/mp3' });
-  };
-  
   const handleDownloadZip = async () => {
     if (!audioSegments || audioSegments.length === 0) {
         setError("No audio segments to process for ZIP.");
@@ -129,7 +85,8 @@ export const Step7Final: React.FC<Step7FinalProps> = ({ audioSegments, onRestart
     try {
         const zip = new JSZip();
         for (let i = 0; i < audioSegments.length; i++) {
-            const mp3Blob = encodeSingleSegmentToMp3(audioSegments[i]);
+            const pcmData = decodeBase64(audioSegments[i]);
+            const mp3Blob = encodePcmToMp3Blob(pcmData);
             zip.file(`podcast_segment_${i + 1}.mp3`, mp3Blob);
         }
         

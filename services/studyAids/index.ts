@@ -14,9 +14,14 @@ type IdeaNode = MainIdea | SubIdea | NestedSubIdea;
 const generateAidsForNode = async (node: IdeaNode): Promise<{ flashcards: Flashcard[], quizQuestions: QuizQuestion[] }> => {
     const prompt = generateStudyAidsPrompt(node);
     
+    // If the prompt is empty, it means the node and its children have no content, so we skip it.
+    if (!prompt) {
+        return { flashcards: [], quizQuestions: [] };
+    }
+
     try {
         const response = await ai.models.generateContent({
-            model: 'gemma-3-27b-it',
+            model: 'gemini-2.5-flash-lite',
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -28,12 +33,14 @@ const generateAidsForNode = async (node: IdeaNode): Promise<{ flashcards: Flashc
         
         // Basic validation
         if (result.flashcards && result.quizQuestions) {
+            console.log("Flashcards",result)
             return result;
         }
         console.warn('Gemini response for study aids was valid JSON but empty. Node:', node.title);
         return { flashcards: [], quizQuestions: [] };
     } catch (e) {
         console.error(`Failed to generate study aids for node: ${node.title}`, e);
+        
         return { flashcards: [], quizQuestions: [] }; // Return empty on error to not block the whole process
     }
 };
